@@ -11,6 +11,10 @@ const navMain = [
   { ix: "06", label: "Devoluções",      href: "/dashboard/devolucoes" },
 ];
 
+const navTools = [
+  { label: "Chat IA", href: "/dashboard/chat", icon: "✦" },
+];
+
 const navCadastros = [
   { label: "Clientes",   href: "/clientes" },
   { label: "Produtos",   href: "/produtos" },
@@ -85,6 +89,33 @@ export default function Sidebar({ counts }: SidebarProps) {
                     {item.badge ?? count}
                   </span>
                 )}
+              </div>
+            </Link>
+          );
+        })}
+
+        <div style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.08em", padding: "16px 10px 8px", fontWeight: 600 }}>
+          Ferramentas
+        </div>
+        {navTools.map((item) => {
+          const active = path === item.href || path.startsWith(item.href + "/");
+          return (
+            <Link key={item.href} href={item.href} style={{ textDecoration: "none" }}>
+              <div style={{
+                display: "flex", alignItems: "center", gap: 10,
+                padding: "9px 12px", borderRadius: 10, marginBottom: 2,
+                cursor: "pointer", fontSize: 13,
+                color: active ? "var(--blue-deep)" : "var(--ink-2)",
+                fontWeight: active ? 500 : 400,
+                background: active
+                  ? "linear-gradient(180deg,#eef2f9 0%,#e3e9f3 100%)"
+                  : "transparent",
+                boxShadow: active ? "inset 0 0 0 1px #d4dceb" : "none",
+              }}>
+                <span style={{ fontSize: 14, color: active ? "var(--blue)" : "var(--muted)", width: 18, textAlign: "center" }}>
+                  {item.icon}
+                </span>
+                <span style={{ flex: 1 }}>{item.label}</span>
               </div>
             </Link>
           );
