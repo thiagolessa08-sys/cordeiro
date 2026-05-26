@@ -5,3 +5,6 @@ builder = "nixpacks"
 startCommand = "npm run start"
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
+
+[deploy.responseTimeout]
+timeout = 120

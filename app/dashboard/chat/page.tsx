@@ -553,11 +553,18 @@ export default function ChatPage() {
 
     const history = [...messages, userMsg].map((m) => ({ role: m.role, content: m.content }));
 
+    // Abort automático após 110 segundos (antes do maxDuration do servidor)
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 110_000);
+
     try {
       const res = await fetch("/api/chat", {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: history }),
+        signal: controller.signal,
       });
+      clearTimeout(timer);
       const data = await res.json() as { response?: string; queries?: QueryRecord[]; error?: string };
       setMessages((prev) => {
         const next = [...prev];
@@ -568,7 +575,13 @@ export default function ChatPage() {
         return next;
       });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+      clearTimeout(timer);
+      let msg = err instanceof Error ? err.message : String(err);
+      if (err instanceof DOMException && err.name === "AbortError") {
+        msg = "A consulta demorou mais de 110 segundos e foi cancelada. Tente uma pergunta mais específica ou um período menor.";
+      } else if (msg.toLowerCase().includes("failed to fetch") || msg.toLowerCase().includes("networkerror")) {
+        msg = "Não foi possível conectar ao servidor. Verifique sua conexão ou aguarde alguns segundos e tente novamente.";
+      }
       setMessages((prev) => {
         const next = [...prev];
         next[next.length - 1] = { role: "assistant", content: "", error: msg };
