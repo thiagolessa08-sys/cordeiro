@@ -600,7 +600,28 @@ export default function ChatPage() {
           <span style={{ color: "var(--muted)" }}>/</span>
           <span style={{ color: "var(--ink)", fontWeight: 500 }}>Chat IA</span>
         </div>
-        <div style={{ marginLeft: "auto", fontSize: 11, color: "var(--muted)" }}>Claude · Sybase IQ 16</div>
+
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 12 }}>
+          {/* Botão nova consulta — só aparece quando há mensagens */}
+          {!isEmpty && (
+            <button
+              onClick={() => { setMessages([]); setInput(""); textareaRef.current?.focus(); }}
+              style={{
+                display: "flex", alignItems: "center", gap: 6,
+                padding: "6px 14px", borderRadius: 8, border: "none",
+                background: "linear-gradient(135deg, #1b3664, #2c5fa8)",
+                color: "#fff", fontSize: 12, fontWeight: 500, cursor: "pointer",
+                boxShadow: "0 2px 8px rgba(27,54,100,.25)",
+                transition: "opacity .15s",
+              }}
+              onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = "0.85")}
+              onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = "1")}
+            >
+              ＋ Nova consulta
+            </button>
+          )}
+          <span style={{ fontSize: 11, color: "var(--muted)" }}>Claude · Sybase IQ 16</span>
+        </div>
       </div>
 
       {/* Área de mensagens */}
