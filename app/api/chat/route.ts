@@ -3,6 +3,13 @@ import Anthropic from "@anthropic-ai/sdk";
 import { SCHEMA_CONTEXT } from "@/lib/schema-context";
 import { executeQuery } from "@/lib/sybase";
 
+/* ── Config do segmento de rota ─────────────────────────── */
+export const maxDuration = 120; // segundos — Railway/Vercel
+
+/* ── Constantes ──────────────────────────────────────────── */
+const MAX_ITERATIONS  = 6;    // máximo de rodadas de tool use
+const QUERY_TIMEOUT   = 25_000; // ms por query no Sybase
+
 /* ── tipos ──────────────────────────────────────────────── */
 interface ChatMessage {
   role: "user" | "assistant";
@@ -26,7 +33,8 @@ const tools: Anthropic.Tool[] = [
     description:
       "Executa uma query SELECT no banco Sybase IQ 16 da Grupo Melo Cordeiro. " +
       "Apenas SELECT é permitido — nunca INSERT, UPDATE, DELETE ou DDL. " +
-      "Máximo de 200 linhas retornadas.",
+      "Máximo de 200 linhas retornadas. " +
+      "Se não encontrar dados, retorne imediatamente com essa informação — não tente outra query similar.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -47,13 +55,18 @@ const tools: Anthropic.Tool[] = [
 
 /* ── helper: só SELECT ──────────────────────────────────── */
 function isSafeSelect(sql: string): boolean {
-  const clean = sql.trim().toUpperCase();
   return (
-    clean.startsWith("SELECT") &&
-    !/(INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|TRUNCATE|EXEC|EXECUTE|GRANT|REVOKE)\s/i.test(
-      sql
-    )
+    sql.trim().toUpperCase().startsWith("SELECT") &&
+    !/(INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|TRUNCATE|EXEC|EXECUTE|GRANT|REVOKE)\s/i.test(sql)
   );
+}
+
+/* ── helper: query com timeout ──────────────────────────── */
+async function executeWithTimeout(sql: string, ms: number) {
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error(`Query ultrapassou ${ms / 1000}s — tente simplificar a consulta.`)), ms)
+  );
+  return Promise.race([executeQuery(sql, 200), timeout]);
 }
 
 /* ── POST /api/chat ─────────────────────────────────────── */
@@ -76,15 +89,15 @@ export async function POST(req: NextRequest) {
 
     const client = new Anthropic({ apiKey });
 
-    /* Converte mensagens para o formato SDK */
     const sdkMessages: Anthropic.MessageParam[] = userMessages.map((m) => ({
       role: m.role,
       content: m.content,
     }));
 
     const queries: QueryRecord[] = [];
+    let iterations = 0;
 
-    /* ── Agentic loop ────────────────────────────────────── */
+    /* ── Primeira chamada ────────────────────────────────── */
     let response = await client.messages.create({
       model: "claude-sonnet-4-5",
       max_tokens: 4096,
@@ -93,16 +106,36 @@ export async function POST(req: NextRequest) {
       messages: sdkMessages,
     });
 
-    /* Executa ferramentas até Claude emitir stop_reason = "end_turn" */
+    /* ── Agentic loop com guarda de iterações ────────────── */
     while (response.stop_reason === "tool_use") {
+      iterations++;
+
+      /* Se atingir o limite, pede ao Claude que conclua com o que tem */
+      if (iterations > MAX_ITERATIONS) {
+        sdkMessages.push({ role: "assistant", content: response.content });
+        sdkMessages.push({
+          role: "user",
+          content:
+            "Você já executou muitas queries. Com os dados que já obteve, " +
+            "apresente a análise final agora — mesmo que incompleta.",
+        });
+        response = await client.messages.create({
+          model: "claude-sonnet-4-5",
+          max_tokens: 2048,
+          system: SCHEMA_CONTEXT,
+          tools: [],           // sem ferramentas → resposta direta
+          messages: sdkMessages,
+        });
+        break;
+      }
+
       const toolUseBlocks = response.content.filter(
         (b): b is Anthropic.ToolUseBlock => b.type === "tool_use"
       );
 
-      /* Monta resposta de assistente com todo o conteúdo atual */
       sdkMessages.push({ role: "assistant", content: response.content });
 
-      /* Processa cada tool_use em paralelo */
+      /* Executa todas as ferramentas desta rodada em paralelo */
       const toolResults = await Promise.all(
         toolUseBlocks.map(async (block) => {
           if (block.name !== "execute_sql") {
@@ -113,33 +146,18 @@ export async function POST(req: NextRequest) {
             };
           }
 
-          const input = block.input as { sql: string; description: string };
-          const { sql, description } = input;
+          const { sql, description } = block.input as { sql: string; description: string };
 
-          /* Segurança: apenas SELECT */
           if (!isSafeSelect(sql)) {
-            const rec: QueryRecord = {
-              description,
-              sql,
-              columns: [],
-              rows: [],
-              count: 0,
-              truncated: false,
-              error: "Apenas queries SELECT são permitidas.",
-            };
+            const rec: QueryRecord = { description, sql, columns: [], rows: [], count: 0, truncated: false, error: "Apenas queries SELECT são permitidas." };
             queries.push(rec);
-            return {
-              type: "tool_result" as const,
-              tool_use_id: block.id,
-              content: JSON.stringify({ error: rec.error }),
-            };
+            return { type: "tool_result" as const, tool_use_id: block.id, content: JSON.stringify({ error: rec.error }) };
           }
 
           try {
-            const result = await executeQuery(sql, 200);
+            const result = await executeWithTimeout(sql, QUERY_TIMEOUT);
             const rec: QueryRecord = {
-              description,
-              sql,
+              description, sql,
               columns: result.columns,
               rows: result.rows,
               count: result.count,
@@ -147,35 +165,18 @@ export async function POST(req: NextRequest) {
             };
             queries.push(rec);
 
-            /* Envia ao Claude apenas colunas + primeiras 50 linhas para economizar tokens */
-            const preview = {
-              columns: result.columns,
-              rows: result.rows.slice(0, 50),
-              count: result.count,
-              truncated: result.truncated || result.rows.length > 50,
-            };
-            return {
-              type: "tool_result" as const,
-              tool_use_id: block.id,
-              content: JSON.stringify(preview),
-            };
+            /* Envia preview ao Claude (max 50 linhas) para economizar tokens */
+            const hasData = result.rows.length > 0;
+            const preview = hasData
+              ? { columns: result.columns, rows: result.rows.slice(0, 50), count: result.count, truncated: result.truncated || result.rows.length > 50 }
+              : { columns: result.columns, rows: [], count: 0, message: "A query não retornou dados. O vendedor/registro pode não existir ou não ter movimentação no período." };
+
+            return { type: "tool_result" as const, tool_use_id: block.id, content: JSON.stringify(preview) };
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
-            const rec: QueryRecord = {
-              description,
-              sql,
-              columns: [],
-              rows: [],
-              count: 0,
-              truncated: false,
-              error: msg,
-            };
+            const rec: QueryRecord = { description, sql, columns: [], rows: [], count: 0, truncated: false, error: msg };
             queries.push(rec);
-            return {
-              type: "tool_result" as const,
-              tool_use_id: block.id,
-              content: JSON.stringify({ error: msg }),
-            };
+            return { type: "tool_result" as const, tool_use_id: block.id, content: JSON.stringify({ error: msg }) };
           }
         })
       );
@@ -193,7 +194,7 @@ export async function POST(req: NextRequest) {
 
     /* Extrai texto final */
     const textBlock = response.content.find((b): b is Anthropic.TextBlock => b.type === "text");
-    const finalText = textBlock?.text ?? "Não foi possível gerar uma resposta.";
+    const finalText = textBlock?.text ?? "Não foi possível gerar uma resposta com os dados disponíveis.";
 
     return NextResponse.json({ response: finalText, queries });
   } catch (err) {
