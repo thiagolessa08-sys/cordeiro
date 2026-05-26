@@ -110,25 +110,32 @@ TABELAS DISPONÍVEIS  (schema: cordeiro)
     Pedidos críticos (>60d): DATEDIFF(day, OrderDocumentDate, TODAY()) > 60
 
 ▌3. cordeiro.COTACOES_SAP_PRODUCAO  — Cotações de Venda
-  Granularidade: 1 linha por item (mesma estrutura de PEDIDOS, prefixo Quotation*)
-  ┌─────────────────────────────┬────────┬──────────────────────────────────────────────────────┐
-  │ QuotationDocInternalNumber  │ FLOAT  │ Nº interno da cotação                                │
-  │ QuotationDocumentDate       │ DATE   │ Data da cotação                                      │
-  │ QuotationDocumentStatus     │ CHAR   │ 'O'=aberta  'C'=convertida/fechada                  │
-  │ QuotationDocCancellationStatus│ CHAR │ 'N'=normal  'Y'=cancelada                           │
-  │ QuotationTaxID              │ TEXT   │ CNPJ do cliente                                      │
-  │ QuotationTotal              │ FLOAT  │ Total da cotação                                     │
-  │ QuotationSalesEmployeeName  │ FLOAT  │ Código do vendedor                                   │
-  │ QuotationItemCode           │ TEXT   │ Código do produto                                    │
-  │ QuotationItemDescription    │ TEXT   │ Descrição                                            │
-  │ QuotationItemQuantity       │ FLOAT  │ Quantidade                                           │
-  │ QuotationItemPrice          │ FLOAT  │ Preço unitário                                       │
-  │ QuotationItemItemTotal      │ FLOAT  │ Total do item                                        │
-  └─────────────────────────────┴────────┴──────────────────────────────────────────────────────┘
+  Granularidade: 1 linha por item (prefixo Quotation*)
+  ┌───────────────────────────────────┬────────┬──────────────────────────────────────────────────┐
+  │ Coluna                            │ Tipo   │ Descrição                                        │
+  ├───────────────────────────────────┼────────┼──────────────────────────────────────────────────┤
+  │ QuotationDocInternalNumber        │ FLOAT  │ Nº interno da cotação                            │
+  │ QuotationDocumentDate             │ DATE   │ Data da cotação                                  │
+  │ QuotationDocumentStatus           │ CHAR   │ 'O'=aberta  'C'=convertida/fechada              │
+  │ QuotationDocCancellationStatus    │ CHAR   │ 'N'=normal  'Y'=cancelada                       │
+  │ QuotationCustomerName             │ TEXT   │ Código interno do cliente                        │
+  │ QuotationTaxID                    │ TEXT   │ CNPJ do cliente                                  │
+  │ QuotationTotal                    │ FLOAT  │ Total do documento (repetido em cada item)       │
+  │ QuotationSalesEmployeeName        │ FLOAT  │ Código do vendedor                               │
+  │ QuotationItemCode                 │ TEXT   │ Código do produto                                │
+  │ QuotationItemDescription          │ TEXT   │ Descrição do produto                             │
+  │ QuotationItemQuantity             │ FLOAT  │ Quantidade                                       │
+  │ QuotationItemOpenQty              │ FLOAT  │ Qtd em aberto                                    │
+  │ QuotationItemPrice                │ FLOAT  │ Preço unitário                                   │
+  │ QuotationItemTotal                │ FLOAT  │ Total do item ← use para somar valor             │
+  │ QuotationItemOpenAmount           │ FLOAT  │ Valor em aberto do item                          │
+  │ QuotationItemLineStatus           │ CHAR   │ Status da linha                                  │
+  └───────────────────────────────────┴────────┴──────────────────────────────────────────────────┘
   Padrões úteis:
     Cotações abertas:  WHERE QuotationDocumentStatus = 'O' AND QuotationDocCancellationStatus = 'N'
     Cotações ganhas:   WHERE QuotationDocumentStatus = 'C' AND QuotationDocCancellationStatus = 'N'
     Cotações perdidas: WHERE QuotationDocCancellationStatus = 'Y'
+    Valor das cotações: SUM(QuotationItemTotal)  ← não usar QuotationTotal (repetido por item)
 
 ▌4. cordeiro.APROVACOES_SAP_PRODUCAO  — Fila de Aprovações SAP
   Granularidade: 1 linha por etapa de aprovação de cada documento
@@ -171,14 +178,51 @@ TABELAS DISPONÍVEIS  (schema: cordeiro)
 
 ▌6. cordeiro.ENTREGA_SAP_PRODUCAO  — Entregas / Deliveries
   Granularidade: 1 linha por item (prefixo Delivery*)
-  Colunas prováveis (verificar com SELECT TOP 1 * se necessário):
-    DeliveryDocInternalNumber, DeliveryDocumentDate, DeliveryDocumentStatus,
-    DeliveryTaxID, DeliveryTotal, DeliverySalesEmployeeName,
-    DeliveryItemCode, DeliveryItemDescription, DeliveryItemQuantity, DeliveryItemItemTotal
+  ┌───────────────────────────────┬────────┬──────────────────────────────────────────────────────┐
+  │ Coluna                        │ Tipo   │ Descrição                                            │
+  ├───────────────────────────────┼────────┼──────────────────────────────────────────────────────┤
+  │ DeliveryDocInternalNumber     │ FLOAT  │ Nº interno da entrega                                │
+  │ DeliveryDocumentDate          │ DATE   │ Data da entrega                                      │
+  │ DeliveryDocumentStatus        │ CHAR   │ Status do documento                                  │
+  │ DeliveryDocCancellationStatus │ CHAR   │ 'N'=normal  'Y'=cancelada                           │
+  │ DeliveryCustomerName          │ TEXT   │ Código do cliente                                    │
+  │ DeliveryTaxID                 │ TEXT   │ CNPJ do cliente                                      │
+  │ DeliveryTotal                 │ FLOAT  │ Total do documento (repetido por item)               │
+  │ DeliverySalesEmployeeName     │ FLOAT  │ Código do vendedor                                   │
+  │ DeliveryItemCode              │ TEXT   │ Código do produto                                    │
+  │ DeliveryItemDescription       │ TEXT   │ Descrição do produto                                 │
+  │ DeliveryItemQuantity          │ FLOAT  │ Quantidade                                           │
+  │ DeliveryItemPrice             │ FLOAT  │ Preço unitário                                       │
+  │ DeliveryItemTotal             │ FLOAT  │ Total do item ← use para somar valor                 │
+  │ DeliveryItemOpenAmount        │ FLOAT  │ Valor em aberto do item                              │
+  │ DeliveryItemActualDelvryDate  │ DATE   │ Data real de entrega                                 │
+  └───────────────────────────────┴────────┴──────────────────────────────────────────────────────┘
+  Padrões úteis:
+    Entregas válidas:  WHERE DeliveryDocCancellationStatus = 'N'
+    Valor entregue:    SUM(DeliveryItemTotal)
 
-▌7. cordeiro.FATURAADIANTAMENTO_SAP_PRODUCAO  — Faturas de Adiantamento
-  Colunas prováveis (verificar com SELECT TOP 1 * se necessário):
-    AdvanceDocInternalNumber, AdvanceDocumentDate, AdvanceTaxID, AdvanceTotal
+▌7. cordeiro.FATURAADIANTAMENTO_SAP_PRODUCAO  — Faturas de Adiantamento (Down Payments)
+  Granularidade: 1 linha por item (prefixo DownPaymt*)
+  ┌───────────────────────────────┬────────┬──────────────────────────────────────────────────────┐
+  │ Coluna                        │ Tipo   │ Descrição                                            │
+  ├───────────────────────────────┼────────┼──────────────────────────────────────────────────────┤
+  │ DownPaymtDocInternalNumber    │ FLOAT  │ Nº interno                                           │
+  │ DownPaymtDocumentDate         │ DATE   │ Data do documento                                    │
+  │ DownPaymtDocumentStatus       │ CHAR   │ Status                                               │
+  │ DownPaymtDocCancellationStatus│ CHAR   │ 'N'=normal  'Y'=cancelado                           │
+  │ DownPaymtCustomerName         │ TEXT   │ Código do cliente                                    │
+  │ DownPaymtTaxID                │ TEXT   │ CNPJ do cliente                                      │
+  │ DownPaymtTotal                │ FLOAT  │ Total do documento                                   │
+  │ DownPaymtSalesEmployeeName    │ FLOAT  │ Código do vendedor                                   │
+  │ DownPaymtItemCode             │ TEXT   │ Código do produto                                    │
+  │ DownPaymtItemDescription      │ TEXT   │ Descrição do produto                                 │
+  │ DownPaymtItemQuantity         │ FLOAT  │ Quantidade                                           │
+  │ DownPaymtItemPrice            │ FLOAT  │ Preço unitário                                       │
+  │ DownPaymtItemTotal            │ FLOAT  │ Total do item ← use para somar valor                 │
+  └───────────────────────────────┴────────┴──────────────────────────────────────────────────────┘
+  Padrões úteis:
+    Adiantamentos válidos: WHERE DownPaymtDocCancellationStatus = 'N'
+    Valor total:           SUM(DownPaymtItemTotal)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 INFORMAÇÕES GERAIS
