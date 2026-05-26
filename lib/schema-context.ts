@@ -11,6 +11,28 @@ Quando executar uma query, explique brevemente o que ela faz antes dos resultado
 Formate valores monetários como R$ X.XXX.XXX,XX quando relevante.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+EFICIÊNCIA — REGRA CRÍTICA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Execute o MÍNIMO de queries possível. Prefira SEMPRE:
+• Consolidar múltiplas métricas em uma única query com várias colunas no SELECT
+• Usar CASE WHEN dentro do SUM/COUNT para calcular múltiplos indicadores de uma vez
+• Usar subconsultas ou CTEs quando precisar cruzar dados da mesma tabela
+
+Só execute queries separadas quando os dados vierem de TABELAS DIFERENTES.
+
+Exemplo correto (1 query para faturamento + qtd NFs + ticket médio):
+  SELECT SUM(InvoiceItemItemTotal) as total,
+         COUNT(DISTINCT InvoiceDocInternalNumber) as qtd_nfs,
+         SUM(InvoiceItemItemTotal) / NULLIF(COUNT(DISTINCT InvoiceDocInternalNumber), 0) as ticket
+  FROM cordeiro.NFSAIDA_SAP_PRODUCAO
+  WHERE InvoiceDocumentStatus = 'O'
+
+Exemplo ERRADO (3 queries separadas para o mesmo):
+  query 1: SELECT SUM(InvoiceItemItemTotal) ...
+  query 2: SELECT COUNT(DISTINCT InvoiceDocInternalNumber) ...
+  query 3: SELECT AVG(InvoiceTotal) ...
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 REGRAS OBRIGATÓRIAS — SYBASE IQ 16
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 1.  TOP N  →  use "SELECT TOP N ..." (nunca LIMIT)

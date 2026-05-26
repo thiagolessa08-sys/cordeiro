@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
 
     /* ── Primeira chamada ────────────────────────────────── */
     let response = await client.messages.create({
-      model: "claude-sonnet-4-5",
+      model: "claude-haiku-4-5",
       max_tokens: 4096,
       system: SCHEMA_CONTEXT,
       tools,
@@ -120,7 +120,7 @@ export async function POST(req: NextRequest) {
             "apresente a análise final agora — mesmo que incompleta.",
         });
         response = await client.messages.create({
-          model: "claude-sonnet-4-5",
+          model: "claude-haiku-4-5",
           max_tokens: 2048,
           system: SCHEMA_CONTEXT,
           tools: [],           // sem ferramentas → resposta direta
@@ -184,7 +184,7 @@ export async function POST(req: NextRequest) {
       sdkMessages.push({ role: "user", content: toolResults });
 
       response = await client.messages.create({
-        model: "claude-sonnet-4-5",
+        model: "claude-haiku-4-5",
         max_tokens: 4096,
         system: SCHEMA_CONTEXT,
         tools,
