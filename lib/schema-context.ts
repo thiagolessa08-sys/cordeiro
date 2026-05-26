@@ -15,23 +15,44 @@ REGRAS OBRIGATÓRIAS — SYBASE IQ 16
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 1.  TOP N  →  use "SELECT TOP N ..." (nunca LIMIT)
 2.  NUNCA use UPPER() ou LOWER()  →  banco é case-sensitive; use os valores exatos com aspas simples
-3.  Data atual  →  TODAY()   (jamais GETDATE(), NOW() ou CURRENT_DATE)
-4.  Aritmética de datas  →  DATEADD(day|month|year, N, data)
-5.  Diferença de datas   →  DATEDIFF(day|month|year, data_inicio, data_fim)
-6.  Null safety  →  COALESCE(col, 0)  (não ISNULL, não NVL)
-7.  Trim   →  TRIM(col) para remover espaços
+3.  NUNCA use TRIM()  →  proibido em qualquer lugar da query (WHERE, GROUP BY, SELECT)
+4.  Data atual  →  TODAY()   (jamais GETDATE(), NOW() ou CURRENT_DATE)
+5.  Aritmética de datas  →  DATEADD(day|month|year, N, data)
+6.  Diferença de datas   →  DATEDIFF(day|month|year, data_inicio, data_fim)
+7.  Null safety  →  COALESCE(col, 0)  (não ISNULL, não NVL)
 8.  Concatenação  →  col1 || col2  (nunca col1 + col2)
 9.  Subconsultas escalares NÃO funcionam dentro de NULLIF/COALESCE/CASE
     → calcule numerador e denominador em SELECTs separados
 10. ORDER BY após GROUP BY com CASE: não referencie colunas-fonte nos aliases
 11. Colunas numéricas armazenadas como FLOAT (ex: DocumentType = 17.0):
-    → CAST(CAST(col AS FLOAT) AS INTEGER)
+    → No WHERE/JOIN: compare direto  col = 990  (FLOAT = INT é válido no Sybase IQ)
+    → No SELECT/GROUP BY se precisar exibir como inteiro: CAST(CAST(col AS FLOAT) AS INTEGER)
 12. GROUP BY deve conter todos os campos não-agregados do SELECT
 13. Datas literais: 'YYYY-MM-DD' (aspas simples)
 14. Mês atual: YEAR(col) = 2026 AND MONTH(col) = 5  (maio/2026)
     Mês anterior:  YEAR(col) = 2026 AND MONTH(col) = 4  (abril/2026)
 15. Extrair partes de data: YEAR(col), MONTH(col), DAY(col)
 16. Strings: sempre aspas simples — nunca duplas dentro do SQL
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PERFORMANCE — SYBASE IQ (COLUMNAR ENGINE)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+O Sybase IQ usa engine colunar. Funções sobre colunas desativam a leitura vetorial
+e forçam avaliação linha-a-linha. Para queries rápidas:
+
+✔  col = 'valor'                          (comparação direta — usa vetorização)
+✔  col LIKE 'CABO%'                       (prefixo sem % à esquerda — rápido)
+✔  col >= '2026-01-01'                    (range de data na coluna crua)
+✔  GROUP BY col                           (sem funções — agrupa em memória colunar)
+✔  InvoiceSalesEmployeeName = 990         (FLOAT comparado com INT — funciona)
+
+✘  TRIM(col) = 'valor'                    (PROIBIDO — desativa vetorização)
+✘  UPPER(col) LIKE '%texto%'              (PROIBIDO — row-by-row)
+✘  LOWER(col) = 'valor'                   (PROIBIDO — row-by-row)
+✘  LIKE '%texto%'  em colunas grandes     (evitar — full scan sem índice)
+
+Filtros de data: prefira YEAR(col)/MONTH(col) para agregações mensais,
+ou range direto col >= 'data' AND col < 'data' para períodos específicos.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 TABELAS DISPONÍVEIS  (schema: cordeiro)
@@ -58,8 +79,9 @@ TABELAS DISPONÍVEIS  (schema: cordeiro)
   Padrões úteis:
     Faturamento total:   SUM(InvoiceItemItemTotal)  WHERE InvoiceDocumentStatus = 'O'
     Qtd de NFs:          COUNT(DISTINCT InvoiceDocInternalNumber)
-    Top clientes:        GROUP BY TRIM(InvoiceTaxID)  ORDER BY SUM(InvoiceItemItemTotal) DESC
-    Top produtos:        GROUP BY TRIM(InvoiceItemCode), TRIM(InvoiceItemDescription)
+    Top clientes:        GROUP BY InvoiceTaxID  ORDER BY SUM(InvoiceItemItemTotal) DESC
+    Top produtos:        GROUP BY InvoiceItemCode, InvoiceItemDescription
+    Filtro vendedor:     InvoiceSalesEmployeeName = 990  (sem CAST, sem TRIM)
 
 ▌2. cordeiro.PEDIDOS_SAP_PRODUCAO  — Pedidos de Venda
   Granularidade: 1 linha por item do pedido
