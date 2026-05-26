@@ -38,9 +38,11 @@ export default function FaturamentoChart({ data }: { data: DataPoint[] }) {
         <Tooltip
           contentStyle={{ background: "#111827", border: "1px solid #374151", borderRadius: 8 }}
           labelStyle={{ color: "#f9fafb", fontWeight: 600 }}
-          formatter={(value: number, name: string) =>
-            name === "faturado" ? [fmt(value), "Faturado"] : [value, "NFs"]
-          }
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          formatter={(value: any, name: any) => {
+            const v = Number(value ?? 0);
+            return String(name) === "faturado" ? [fmt(v), "Faturado"] : [v, "NFs"];
+          }}
         />
         <Legend
           formatter={(v) => (v === "faturado" ? "Faturado" : "Qtd NFs")}
