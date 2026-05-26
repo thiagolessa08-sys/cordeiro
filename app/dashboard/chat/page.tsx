@@ -232,9 +232,10 @@ function HBarChart({ headers, rows, valueColIdx }: {
   };
 
   const LPAD = 110, BMAX = 300, VPAD = 80, PL = 12;
-  const RH = 34;
+  const RH = 22;   // altura de cada linha (barra + espaço)
+  const BAR_H = 12; // espessura da barra
   const W = PL + LPAD + BMAX + VPAD;
-  const H = rows.length * RH + 12;
+  const H = rows.length * RH + 10;
 
   const COLORS = ["#1b3664","#2c5fa8","#3b82f6","#60a5fa","#93c5fd","#a5b4fc","#c4b5fd","#d8b4fe"];
 
@@ -247,21 +248,21 @@ function HBarChart({ headers, rows, valueColIdx }: {
         {rows.map((_, i) => {
           const v = values[i];
           const bw = (v / max) * BMAX;
-          const y = i * RH + 6;
+          const y = i * RH + 4;
           const lbl = labels[i].length > 14 ? labels[i].slice(0, 13) + "…" : labels[i];
           return (
             <g key={i}>
-              <text x={PL + LPAD - 6} y={y + RH / 2 + 4} textAnchor="end"
-                fontSize={10.5} fill="#4b5563" fontFamily="'Manrope','Inter',sans-serif">
+              <text x={PL + LPAD - 6} y={y + BAR_H / 2 + 4} textAnchor="end"
+                fontSize={10} fill="#4b5563" fontFamily="'Manrope','Inter',sans-serif">
                 {lbl}
               </text>
               {/* Track */}
-              <rect x={PL + LPAD} y={y + 5} width={BMAX} height={RH - 12} fill="#f1f5f9" rx={4} />
+              <rect x={PL + LPAD} y={y} width={BMAX} height={BAR_H} fill="#eef2f9" rx={3} />
               {/* Bar */}
-              <rect x={PL + LPAD} y={y + 5} width={Math.max(bw, 3)} height={RH - 12} fill={COLORS[Math.min(i, COLORS.length - 1)]} rx={4} />
+              <rect x={PL + LPAD} y={y} width={Math.max(bw, 3)} height={BAR_H} fill={COLORS[Math.min(i, COLORS.length - 1)]} rx={3} />
               {/* Value */}
-              <text x={PL + LPAD + bw + 7} y={y + RH / 2 + 4}
-                fontSize={10.5} fill="#374151" fontWeight={i === 0 ? "600" : "400"}
+              <text x={PL + LPAD + bw + 7} y={y + BAR_H / 2 + 4}
+                fontSize={10} fill="#374151" fontWeight={i === 0 ? "600" : "400"}
                 fontFamily="'Manrope','Inter',sans-serif">
                 {fmt(v)}
               </text>
