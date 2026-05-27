@@ -279,7 +279,7 @@ function HBarChart({ headers, rows, valueColIdx }: {
       <div style={{ fontSize: 10, color: "var(--ink-3)", marginBottom: 6, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em" }}>
         {headers[0]} · {headers[valueColIdx]}
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }}>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block", maxWidth: 640, margin: "0 auto" }}>
         {rows.map((_, i) => {
           const v = values[i];
           const bw = (v / max) * BMAX;
@@ -327,7 +327,7 @@ function VBarChart({ headers, rows, valueColIdx }: {
       <div style={{ fontSize: 10, color: "var(--ink-3)", marginBottom: 6, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em" }}>
         {headers[0]} · {headers[valueColIdx]}
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }}>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block", maxWidth: 640, margin: "0 auto" }}>
         {/* Grid + eixo Y */}
         {[0, 0.25, 0.5, 0.75, 1].map((p, gi) => {
           const y = padT + innerH * (1 - p);
@@ -393,7 +393,7 @@ function LineChart({ headers, rows, valueColIdx }: {
       <div style={{ fontSize: 10, color: "var(--ink-3)", marginBottom: 6, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em" }}>
         {headers[0]} · {headers[valueColIdx]}
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }}>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block", maxWidth: 640, margin: "0 auto" }}>
         <defs>
           <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={BLUE} stopOpacity="0.28" />
