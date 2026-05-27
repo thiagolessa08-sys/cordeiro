@@ -269,30 +269,31 @@ function HBarChart({ headers, rows, valueColIdx }: {
   const max = Math.max(...values, 1);
   const fmt = makeFormatter(rows, valueColIdx);
 
-  const LPAD = 110, BMAX = 300, VPAD = 80, PL = 12;
-  const RH = 22, BAR_H = 12;
+  // viewBox bem largo p/ preencher 100% do container sem ficar com barras gigantes
+  const LPAD = 180, BMAX = 800, VPAD = 120, PL = 16;
+  const RH = 24, BAR_H = 14;
   const W = PL + LPAD + BMAX + VPAD;
-  const H = rows.length * RH + 10;
+  const H = rows.length * RH + 12;
 
   return (
     <div style={{ marginTop: 8 }}>
       <div style={{ fontSize: 10, color: "var(--ink-3)", marginBottom: 6, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em" }}>
         {headers[0]} · {headers[valueColIdx]}
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block", maxWidth: 640, margin: "0 auto" }}>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }}>
         {rows.map((_, i) => {
           const v = values[i];
           const bw = (v / max) * BMAX;
-          const y = i * RH + 4;
-          const lbl = labels[i].length > 14 ? labels[i].slice(0, 13) + "…" : labels[i];
+          const y = i * RH + 5;
+          const lbl = labels[i].length > 22 ? labels[i].slice(0, 21) + "…" : labels[i];
           return (
             <g key={i}>
-              <text x={PL + LPAD - 6} y={y + BAR_H / 2 + 4} textAnchor="end"
-                fontSize={10} fill="#4b5563" fontFamily="'Manrope','Inter',sans-serif">{lbl}</text>
-              <rect x={PL + LPAD} y={y} width={BMAX} height={BAR_H} fill="#eef2f9" rx={3} />
-              <rect x={PL + LPAD} y={y} width={Math.max(bw, 3)} height={BAR_H} fill={CHART_COLORS[Math.min(i, CHART_COLORS.length - 1)]} rx={3} />
-              <text x={PL + LPAD + bw + 7} y={y + BAR_H / 2 + 4}
-                fontSize={10} fill="#374151" fontWeight={i === 0 ? "600" : "400"}
+              <text x={PL + LPAD - 10} y={y + BAR_H / 2 + 5} textAnchor="end"
+                fontSize={13} fill="#4b5563" fontFamily="'Manrope','Inter',sans-serif">{lbl}</text>
+              <rect x={PL + LPAD} y={y} width={BMAX} height={BAR_H} fill="#eef2f9" rx={4} />
+              <rect x={PL + LPAD} y={y} width={Math.max(bw, 3)} height={BAR_H} fill={CHART_COLORS[Math.min(i, CHART_COLORS.length - 1)]} rx={4} />
+              <text x={PL + LPAD + bw + 10} y={y + BAR_H / 2 + 5}
+                fontSize={13} fill="#374151" fontWeight={i === 0 ? "700" : "500"}
                 fontFamily="'Manrope','Inter',sans-serif">{fmt(v)}</text>
             </g>
           );
@@ -311,8 +312,9 @@ function VBarChart({ headers, rows, valueColIdx }: {
   const max = Math.max(...values, 1);
   const fmt = makeFormatter(rows, valueColIdx);
 
-  const W = 600, H = 240;
-  const padL = 48, padR = 16, padT = 18, padB = 38;
+  // viewBox largo → quando o container é largo, altura proporcional fica baixa
+  const W = 1200, H = 280;
+  const padL = 56, padR = 24, padT = 24, padB = 42;
   const innerW = W - padL - padR;
   const innerH = H - padT - padB;
   const n = rows.length;
@@ -320,21 +322,21 @@ function VBarChart({ headers, rows, valueColIdx }: {
   const gap = innerW / n;
   const xAt = (i: number) => padL + gap * i + gap / 2;
   const yAt = (v: number) => padT + innerH - (v / max) * innerH;
-  const labelStep = Math.max(1, Math.ceil(n / 10));
+  const labelStep = Math.max(1, Math.ceil(n / 14));
 
   return (
     <div style={{ marginTop: 8 }}>
       <div style={{ fontSize: 10, color: "var(--ink-3)", marginBottom: 6, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em" }}>
         {headers[0]} · {headers[valueColIdx]}
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block", maxWidth: 640, margin: "0 auto" }}>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }}>
         {/* Grid + eixo Y */}
         {[0, 0.25, 0.5, 0.75, 1].map((p, gi) => {
           const y = padT + innerH * (1 - p);
           return (
             <g key={gi}>
               <line x1={padL} x2={W - padR} y1={y} y2={y} stroke="#e7ecf6" strokeDasharray={gi === 0 ? "0" : "2 3"} />
-              <text x={padL - 8} y={y + 3} fontSize={9} textAnchor="end" fill="#9ea7c1" fontFamily="'Manrope',sans-serif">
+              <text x={padL - 10} y={y + 4} fontSize={11} textAnchor="end" fill="#9ea7c1" fontFamily="'Manrope',sans-serif">
                 {fmt(max * p)}
               </text>
             </g>
@@ -346,15 +348,28 @@ function VBarChart({ headers, rows, valueColIdx }: {
           const bh = (padT + innerH) - y;
           return (
             <rect key={i} x={xAt(i) - barW / 2} y={y} width={barW} height={Math.max(bh, 0)}
-              fill={CHART_COLORS[i % CHART_COLORS.length]} rx={3} />
+              fill={CHART_COLORS[i % CHART_COLORS.length]} rx={4} />
+          );
+        })}
+        {/* Rótulos de valor em cima de cada barra */}
+        {rows.map((_, i) => {
+          const v = values[i];
+          if (v === 0) return null;
+          const y = yAt(v);
+          return (
+            <text key={i} x={xAt(i)} y={y - 6} textAnchor="middle"
+              fontSize={11} fontWeight={600} fill="#374151"
+              fontFamily="'Manrope',sans-serif">
+              {fmt(v)}
+            </text>
           );
         })}
         {/* X labels */}
         {rows.map((_, i) => {
           if (i % labelStep !== 0 && i !== n - 1) return null;
-          const lbl = labels[i].length > 8 ? labels[i].slice(0, 7) + "…" : labels[i];
+          const lbl = labels[i].length > 10 ? labels[i].slice(0, 9) + "…" : labels[i];
           return (
-            <text key={i} x={xAt(i)} y={H - 12} fontSize={9} textAnchor="middle" fill="#9ea7c1" fontFamily="'Manrope',sans-serif">
+            <text key={i} x={xAt(i)} y={H - 14} fontSize={11} textAnchor="middle" fill="#4b5563" fontFamily="'Manrope',sans-serif">
               {lbl}
             </text>
           );
@@ -373,16 +388,16 @@ function LineChart({ headers, rows, valueColIdx }: {
   const max = Math.max(...values, 1);
   const fmt = makeFormatter(rows, valueColIdx);
 
-  const W = 600, H = 220;
-  const padL = 48, padR = 16, padT = 18, padB = 36;
+  const W = 1200, H = 260;
+  const padL = 56, padR = 24, padT = 24, padB = 40;
   const innerW = W - padL - padR;
   const innerH = H - padT - padB;
   const n = rows.length;
   const xAt = (i: number) => n === 1 ? padL + innerW / 2 : padL + (innerW * i) / (n - 1);
   const yAt = (v: number) => padT + innerH - (v / max) * innerH;
-  const labelStep = Math.max(1, Math.ceil(n / 10));
+  const labelStep = Math.max(1, Math.ceil(n / 14));
+  const valueStep = Math.max(1, Math.ceil(n / 8));  // rótulos de valor em menos pontos
 
-  // Linha (polyline) e área (path fechado)
   const linePoints = rows.map((_, i) => `${xAt(i)},${yAt(values[i])}`).join(" ");
   const areaPath = `M${xAt(0)},${padT + innerH} L${rows.map((_, i) => `${xAt(i)},${yAt(values[i])}`).join(" L")} L${xAt(n - 1)},${padT + innerH} Z`;
 
@@ -393,7 +408,7 @@ function LineChart({ headers, rows, valueColIdx }: {
       <div style={{ fontSize: 10, color: "var(--ink-3)", marginBottom: 6, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em" }}>
         {headers[0]} · {headers[valueColIdx]}
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block", maxWidth: 640, margin: "0 auto" }}>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }}>
         <defs>
           <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={BLUE} stopOpacity="0.28" />
@@ -406,7 +421,7 @@ function LineChart({ headers, rows, valueColIdx }: {
           return (
             <g key={gi}>
               <line x1={padL} x2={W - padR} y1={y} y2={y} stroke="#e7ecf6" strokeDasharray={gi === 0 ? "0" : "2 3"} />
-              <text x={padL - 8} y={y + 3} fontSize={9} textAnchor="end" fill="#9ea7c1" fontFamily="'Manrope',sans-serif">
+              <text x={padL - 10} y={y + 4} fontSize={11} textAnchor="end" fill="#9ea7c1" fontFamily="'Manrope',sans-serif">
                 {fmt(max * p)}
               </text>
             </g>
@@ -415,17 +430,31 @@ function LineChart({ headers, rows, valueColIdx }: {
         {/* Área */}
         <path d={areaPath} fill={`url(#${gradId})`} />
         {/* Linha */}
-        <polyline points={linePoints} fill="none" stroke={BLUE} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+        <polyline points={linePoints} fill="none" stroke={BLUE} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
         {/* Pontos */}
         {rows.map((_, i) => (
-          <circle key={i} cx={xAt(i)} cy={yAt(values[i])} r={3} fill="#fff" stroke={BLUE} strokeWidth={1.5} />
+          <circle key={i} cx={xAt(i)} cy={yAt(values[i])} r={4} fill="#fff" stroke={BLUE} strokeWidth={2} />
         ))}
+        {/* Rótulos de valor em pontos espaçados (e sempre no max/min) */}
+        {rows.map((_, i) => {
+          const v = values[i];
+          if (v === 0) return null;
+          const isExtreme = v === max || v === Math.min(...values.filter(x => x > 0));
+          if (i % valueStep !== 0 && !isExtreme) return null;
+          return (
+            <text key={i} x={xAt(i)} y={yAt(v) - 8} textAnchor="middle"
+              fontSize={11} fontWeight={600} fill="#374151"
+              fontFamily="'Manrope',sans-serif">
+              {fmt(v)}
+            </text>
+          );
+        })}
         {/* X labels */}
         {rows.map((_, i) => {
           if (i % labelStep !== 0 && i !== n - 1) return null;
-          const lbl = labels[i].length > 8 ? labels[i].slice(0, 7) + "…" : labels[i];
+          const lbl = labels[i].length > 10 ? labels[i].slice(0, 9) + "…" : labels[i];
           return (
-            <text key={i} x={xAt(i)} y={H - 12} fontSize={9} textAnchor="middle" fill="#9ea7c1" fontFamily="'Manrope',sans-serif">
+            <text key={i} x={xAt(i)} y={H - 14} fontSize={11} textAnchor="middle" fill="#4b5563" fontFamily="'Manrope',sans-serif">
               {lbl}
             </text>
           );
