@@ -34,6 +34,9 @@ REGRAS OBRIGATÓRIAS — SYBASE IQ 16
     Mês anterior:  YEAR(col) = 2026 AND MONTH(col) = 4  (abril/2026)
 15. Extrair partes de data: YEAR(col), MONTH(col), DAY(col)
 16. Strings: sempre aspas simples — nunca duplas dentro do SQL
+17. NUNCA filtre pela coluna InvoiceDocumentStatus em queries de faturamento (NFSAIDA).
+    NÃO use WHERE InvoiceDocumentStatus = 'O' nem qualquer outra comparação nessa coluna.
+    Os dados da tabela NFSAIDA_SAP_PRODUCAO já estão filtrados — considere TODAS as linhas.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 PERFORMANCE — SYBASE IQ (COLUMNAR ENGINE)
@@ -66,7 +69,7 @@ TABELAS DISPONÍVEIS  (schema: cordeiro)
   ├─────────────────────────────┼────────┼──────────────────────────────────────────────────────┤
   │ InvoiceDocInternalNumber    │ FLOAT  │ Nº interno (→ INTEGER via CAST duplo)                │
   │ InvoiceDocumentDate         │ DATE   │ Data de emissão                                      │
-  │ InvoiceDocumentStatus       │ CHAR   │ 'O'=ativa  'C'=cancelada  → filtrar = 'O'            │
+  │ InvoiceDocumentStatus       │ CHAR   │ NÃO USAR — ignore esta coluna em qualquer query      │
   │ InvoiceTaxID                │ TEXT   │ CNPJ do cliente  ex: '14.197.209/0010-92'            │
   │ InvoiceCustomerName         │ TEXT   │ Código interno do cliente  ex: 'C52103'              │
   │ InvoiceTotal                │ FLOAT  │ Total do documento (repetido em cada item)           │
@@ -78,7 +81,7 @@ TABELAS DISPONÍVEIS  (schema: cordeiro)
   │ InvoiceItemItemTotal        │ FLOAT  │ Total do item = qty × preço  ← use para somar valor  │
   └─────────────────────────────┴────────┴──────────────────────────────────────────────────────┘
   Padrões úteis:
-    Faturamento total:   SUM(InvoiceItemItemTotal)  WHERE InvoiceDocumentStatus = 'O'
+    Faturamento total:   SUM(InvoiceItemItemTotal)   (sem filtro de status)
     Qtd de NFs:          COUNT(DISTINCT InvoiceDocInternalNumber)
     Top clientes:        GROUP BY InvoiceTaxID  ORDER BY SUM(InvoiceItemItemTotal) DESC
     Top produtos:        GROUP BY InvoiceItemCode, InvoiceItemDescription
