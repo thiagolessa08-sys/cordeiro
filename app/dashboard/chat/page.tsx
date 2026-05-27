@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 
 /* ── tipos ──────────────────────────────────────────────── */
 interface QueryRecord {
@@ -210,16 +210,18 @@ function Toggle({ active, onClick, icon, label }: {
   );
 }
 
-/* ── Gráfico de barras horizontal ────────────────────────── */
-function HBarChart({ headers, rows, valueColIdx }: {
-  headers: string[]; rows: string[][]; valueColIdx: number;
-}) {
-  const labels = rows.map((r) => r[0] ?? "");
-  const values = rows.map((r) => parseNumericCell(r[valueColIdx] ?? "") ?? 0);
-  const max = Math.max(...values, 1);
-  const isCurrency = rows.some((r) => /R\$/.test(r[valueColIdx] ?? ""));
+/* ══════════════════════════════════════════════════════════
+   GRÁFICOS — utilitários compartilhados
+   ══════════════════════════════════════════════════════════ */
 
-  const fmt = (v: number) => {
+const CHART_COLORS = [
+  "#1b3664","#2c5fa8","#3b82f6","#60a5fa","#93c5fd",
+  "#a5b4fc","#c4b5fd","#d8b4fe","#fbbf24","#f87171",
+];
+
+function makeFormatter(rows: string[][], valueColIdx: number) {
+  const isCurrency = rows.some((r) => /R\$/.test(r[valueColIdx] ?? ""));
+  return (v: number) => {
     if (isCurrency) {
       if (v >= 1e9) return `R$ ${(v / 1e9).toFixed(2)}B`;
       if (v >= 1e6) return `R$ ${(v / 1e6).toFixed(1)}M`;
@@ -230,14 +232,47 @@ function HBarChart({ headers, rows, valueColIdx }: {
     if (v >= 1e3) return (v / 1e3).toFixed(0) + "K";
     return v % 1 === 0 ? String(v) : v.toFixed(1);
   };
+}
+
+type ChartType = "hbar" | "vbar" | "line" | "pie";
+
+/** Auto-detecta o melhor tipo de gráfico baseado no formato dos dados */
+function detectChartType(rows: string[][]): ChartType {
+  if (rows.length === 0) return "hbar";
+
+  const firstCol = rows.map((r) => (r[0] ?? "").toString().toLowerCase());
+  const monthPattern = /^(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)/;
+  const datePattern = /(\d{4}|\d{1,2}\/\d{2,4}|\d{4}-\d{1,2})/;
+  const dayNumberPattern = /^\d{1,2}$/;  // só números de 1 a 31 (dias)
+
+  const timeHits = firstCol.filter(
+    (s) => monthPattern.test(s) || datePattern.test(s) || dayNumberPattern.test(s)
+  ).length;
+
+  if (timeHits >= rows.length * 0.7) {
+    return rows.length > 8 ? "line" : "vbar";
+  }
+
+  // Pequenos conjuntos (2-6 categorias) → pizza fica boa
+  if (rows.length >= 2 && rows.length <= 6) return "pie";
+
+  // Padrão: ranking → barras horizontais
+  return "hbar";
+}
+
+/* ── Gráfico de barras horizontal ────────────────────────── */
+function HBarChart({ headers, rows, valueColIdx }: {
+  headers: string[]; rows: string[][]; valueColIdx: number;
+}) {
+  const labels = rows.map((r) => r[0] ?? "");
+  const values = rows.map((r) => parseNumericCell(r[valueColIdx] ?? "") ?? 0);
+  const max = Math.max(...values, 1);
+  const fmt = makeFormatter(rows, valueColIdx);
 
   const LPAD = 110, BMAX = 300, VPAD = 80, PL = 12;
-  const RH = 22;   // altura de cada linha (barra + espaço)
-  const BAR_H = 12; // espessura da barra
+  const RH = 22, BAR_H = 12;
   const W = PL + LPAD + BMAX + VPAD;
   const H = rows.length * RH + 10;
-
-  const COLORS = ["#1b3664","#2c5fa8","#3b82f6","#60a5fa","#93c5fd","#a5b4fc","#c4b5fd","#d8b4fe"];
 
   return (
     <div style={{ marginTop: 8 }}>
@@ -253,25 +288,230 @@ function HBarChart({ headers, rows, valueColIdx }: {
           return (
             <g key={i}>
               <text x={PL + LPAD - 6} y={y + BAR_H / 2 + 4} textAnchor="end"
-                fontSize={10} fill="#4b5563" fontFamily="'Manrope','Inter',sans-serif">
-                {lbl}
-              </text>
-              {/* Track */}
+                fontSize={10} fill="#4b5563" fontFamily="'Manrope','Inter',sans-serif">{lbl}</text>
               <rect x={PL + LPAD} y={y} width={BMAX} height={BAR_H} fill="#eef2f9" rx={3} />
-              {/* Bar */}
-              <rect x={PL + LPAD} y={y} width={Math.max(bw, 3)} height={BAR_H} fill={COLORS[Math.min(i, COLORS.length - 1)]} rx={3} />
-              {/* Value */}
+              <rect x={PL + LPAD} y={y} width={Math.max(bw, 3)} height={BAR_H} fill={CHART_COLORS[Math.min(i, CHART_COLORS.length - 1)]} rx={3} />
               <text x={PL + LPAD + bw + 7} y={y + BAR_H / 2 + 4}
                 fontSize={10} fill="#374151" fontWeight={i === 0 ? "600" : "400"}
-                fontFamily="'Manrope','Inter',sans-serif">
-                {fmt(v)}
-              </text>
+                fontFamily="'Manrope','Inter',sans-serif">{fmt(v)}</text>
             </g>
           );
         })}
       </svg>
     </div>
   );
+}
+
+/* ── Gráfico de barras verticais (colunas) ───────────────── */
+function VBarChart({ headers, rows, valueColIdx }: {
+  headers: string[]; rows: string[][]; valueColIdx: number;
+}) {
+  const labels = rows.map((r) => r[0] ?? "");
+  const values = rows.map((r) => parseNumericCell(r[valueColIdx] ?? "") ?? 0);
+  const max = Math.max(...values, 1);
+  const fmt = makeFormatter(rows, valueColIdx);
+
+  const W = 600, H = 240;
+  const padL = 48, padR = 16, padT = 18, padB = 38;
+  const innerW = W - padL - padR;
+  const innerH = H - padT - padB;
+  const n = rows.length;
+  const barW = (innerW / n) * 0.62;
+  const gap = innerW / n;
+  const xAt = (i: number) => padL + gap * i + gap / 2;
+  const yAt = (v: number) => padT + innerH - (v / max) * innerH;
+  const labelStep = Math.max(1, Math.ceil(n / 10));
+
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div style={{ fontSize: 10, color: "var(--ink-3)", marginBottom: 6, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em" }}>
+        {headers[0]} · {headers[valueColIdx]}
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }}>
+        {/* Grid + eixo Y */}
+        {[0, 0.25, 0.5, 0.75, 1].map((p, gi) => {
+          const y = padT + innerH * (1 - p);
+          return (
+            <g key={gi}>
+              <line x1={padL} x2={W - padR} y1={y} y2={y} stroke="#e7ecf6" strokeDasharray={gi === 0 ? "0" : "2 3"} />
+              <text x={padL - 8} y={y + 3} fontSize={9} textAnchor="end" fill="#9ea7c1" fontFamily="'Manrope',sans-serif">
+                {fmt(max * p)}
+              </text>
+            </g>
+          );
+        })}
+        {/* Barras */}
+        {rows.map((_, i) => {
+          const y = yAt(values[i]);
+          const bh = (padT + innerH) - y;
+          return (
+            <rect key={i} x={xAt(i) - barW / 2} y={y} width={barW} height={Math.max(bh, 0)}
+              fill={CHART_COLORS[i % CHART_COLORS.length]} rx={3} />
+          );
+        })}
+        {/* X labels */}
+        {rows.map((_, i) => {
+          if (i % labelStep !== 0 && i !== n - 1) return null;
+          const lbl = labels[i].length > 8 ? labels[i].slice(0, 7) + "…" : labels[i];
+          return (
+            <text key={i} x={xAt(i)} y={H - 12} fontSize={9} textAnchor="middle" fill="#9ea7c1" fontFamily="'Manrope',sans-serif">
+              {lbl}
+            </text>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+/* ── Gráfico de linha com área ───────────────────────────── */
+function LineChart({ headers, rows, valueColIdx }: {
+  headers: string[]; rows: string[][]; valueColIdx: number;
+}) {
+  const labels = rows.map((r) => r[0] ?? "");
+  const values = rows.map((r) => parseNumericCell(r[valueColIdx] ?? "") ?? 0);
+  const max = Math.max(...values, 1);
+  const fmt = makeFormatter(rows, valueColIdx);
+
+  const W = 600, H = 220;
+  const padL = 48, padR = 16, padT = 18, padB = 36;
+  const innerW = W - padL - padR;
+  const innerH = H - padT - padB;
+  const n = rows.length;
+  const xAt = (i: number) => n === 1 ? padL + innerW / 2 : padL + (innerW * i) / (n - 1);
+  const yAt = (v: number) => padT + innerH - (v / max) * innerH;
+  const labelStep = Math.max(1, Math.ceil(n / 10));
+
+  // Linha (polyline) e área (path fechado)
+  const linePoints = rows.map((_, i) => `${xAt(i)},${yAt(values[i])}`).join(" ");
+  const areaPath = `M${xAt(0)},${padT + innerH} L${rows.map((_, i) => `${xAt(i)},${yAt(values[i])}`).join(" L")} L${xAt(n - 1)},${padT + innerH} Z`;
+
+  const gradId = `lineGrad-${Math.random().toString(36).slice(2, 8)}`;
+
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div style={{ fontSize: 10, color: "var(--ink-3)", marginBottom: 6, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em" }}>
+        {headers[0]} · {headers[valueColIdx]}
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }}>
+        <defs>
+          <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={BLUE} stopOpacity="0.28" />
+            <stop offset="100%" stopColor={BLUE} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        {/* Grid */}
+        {[0, 0.25, 0.5, 0.75, 1].map((p, gi) => {
+          const y = padT + innerH * (1 - p);
+          return (
+            <g key={gi}>
+              <line x1={padL} x2={W - padR} y1={y} y2={y} stroke="#e7ecf6" strokeDasharray={gi === 0 ? "0" : "2 3"} />
+              <text x={padL - 8} y={y + 3} fontSize={9} textAnchor="end" fill="#9ea7c1" fontFamily="'Manrope',sans-serif">
+                {fmt(max * p)}
+              </text>
+            </g>
+          );
+        })}
+        {/* Área */}
+        <path d={areaPath} fill={`url(#${gradId})`} />
+        {/* Linha */}
+        <polyline points={linePoints} fill="none" stroke={BLUE} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+        {/* Pontos */}
+        {rows.map((_, i) => (
+          <circle key={i} cx={xAt(i)} cy={yAt(values[i])} r={3} fill="#fff" stroke={BLUE} strokeWidth={1.5} />
+        ))}
+        {/* X labels */}
+        {rows.map((_, i) => {
+          if (i % labelStep !== 0 && i !== n - 1) return null;
+          const lbl = labels[i].length > 8 ? labels[i].slice(0, 7) + "…" : labels[i];
+          return (
+            <text key={i} x={xAt(i)} y={H - 12} fontSize={9} textAnchor="middle" fill="#9ea7c1" fontFamily="'Manrope',sans-serif">
+              {lbl}
+            </text>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+/* ── Gráfico pizza (donut) com legenda ───────────────────── */
+function PieChart({ headers, rows, valueColIdx }: {
+  headers: string[]; rows: string[][]; valueColIdx: number;
+}) {
+  const labels = rows.map((r) => r[0] ?? "");
+  const values = rows.map((r) => parseNumericCell(r[valueColIdx] ?? "") ?? 0);
+  const total = values.reduce((a, b) => a + b, 0) || 1;
+  const fmt = makeFormatter(rows, valueColIdx);
+
+  const SIZE = 180;
+  const cx = SIZE / 2, cy = SIZE / 2;
+  const rOut = 78, rIn = 46;
+
+  let acc = 0;
+  const arcs = values.map((v, i) => {
+    const startAngle = (acc / total) * 2 * Math.PI;
+    acc += v;
+    const endAngle = (acc / total) * 2 * Math.PI;
+    const x1 = cx + rOut * Math.sin(startAngle);
+    const y1 = cy - rOut * Math.cos(startAngle);
+    const x2 = cx + rOut * Math.sin(endAngle);
+    const y2 = cy - rOut * Math.cos(endAngle);
+    const x3 = cx + rIn * Math.sin(endAngle);
+    const y3 = cy - rIn * Math.cos(endAngle);
+    const x4 = cx + rIn * Math.sin(startAngle);
+    const y4 = cy - rIn * Math.cos(startAngle);
+    const large = endAngle - startAngle > Math.PI ? 1 : 0;
+    // Handle single 100% slice (avoid degenerate arc)
+    const path = values.length === 1 || v === total
+      ? `M ${cx} ${cy - rOut} A ${rOut} ${rOut} 0 1 1 ${cx - 0.001} ${cy - rOut} L ${cx - 0.001} ${cy - rIn} A ${rIn} ${rIn} 0 1 0 ${cx} ${cy - rIn} Z`
+      : `M ${x1} ${y1} A ${rOut} ${rOut} 0 ${large} 1 ${x2} ${y2} L ${x3} ${y3} A ${rIn} ${rIn} 0 ${large} 0 ${x4} ${y4} Z`;
+    return { path, color: CHART_COLORS[i % CHART_COLORS.length], pct: (v / total) * 100, value: v, label: String(labels[i]) };
+  });
+
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div style={{ fontSize: 10, color: "var(--ink-3)", marginBottom: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em" }}>
+        {headers[0]} · {headers[valueColIdx]}
+      </div>
+      <div style={{ display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap" }}>
+        <svg viewBox={`0 0 ${SIZE} ${SIZE}`} style={{ width: SIZE, height: SIZE, flexShrink: 0 }}>
+          {arcs.map((arc, i) => (
+            <path key={i} d={arc.path} fill={arc.color} stroke="#fff" strokeWidth="1.5" />
+          ))}
+          <text x={cx} y={cy - 4} textAnchor="middle" fontSize={11} fill="var(--ink-3)" fontFamily="'Manrope',sans-serif">Total</text>
+          <text x={cx} y={cy + 12} textAnchor="middle" fontSize={13} fontWeight={700} fill={BLUE} fontFamily="'Manrope',sans-serif">{fmt(total)}</text>
+        </svg>
+        <div style={{ flex: 1, minWidth: 180, display: "flex", flexDirection: "column", gap: 5 }}>
+          {arcs.map((arc, i) => {
+            const lbl = arc.label.length > 22 ? arc.label.slice(0, 21) + "…" : arc.label;
+            return (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11 }}>
+                <div style={{ width: 11, height: 11, borderRadius: 3, background: arc.color, flexShrink: 0 }} />
+                <span style={{ color: "var(--ink-2)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{lbl}</span>
+                <span style={{ color: "var(--ink-3)", fontVariantNumeric: "tabular-nums" }}>{fmt(arc.value)}</span>
+                <span style={{ color: BLUE, fontWeight: 600, fontVariantNumeric: "tabular-nums", minWidth: 40, textAlign: "right" }}>
+                  {arc.pct.toFixed(1)}%
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Roteador: escolhe o componente certo conforme tipo ──── */
+function ChartView({ type, headers, rows, valueColIdx }: {
+  type: ChartType; headers: string[]; rows: string[][]; valueColIdx: number;
+}) {
+  switch (type) {
+    case "vbar": return <VBarChart headers={headers} rows={rows} valueColIdx={valueColIdx} />;
+    case "line": return <LineChart headers={headers} rows={rows} valueColIdx={valueColIdx} />;
+    case "pie":  return <PieChart  headers={headers} rows={rows} valueColIdx={valueColIdx} />;
+    default:     return <HBarChart headers={headers} rows={rows} valueColIdx={valueColIdx} />;
+  }
 }
 
 /* ── Tabela estilizada ───────────────────────────────────── */
@@ -333,11 +573,58 @@ function StyledTable({ headers, rows, limit = 10 }: {
   );
 }
 
-/* ── Tabela markdown com toggle Tabela / Gráfico ─────────── */
+/* ── Barra de modos com 5 opções (Tabela + 4 charts) ─────── */
+type ViewMode = "table" | ChartType;
+
+function ViewModeBar({
+  mode, setMode, canChart, suggested,
+}: {
+  mode: ViewMode; setMode: (m: ViewMode) => void; canChart: boolean; suggested: ChartType;
+}) {
+  const items: { key: ViewMode; icon: string; label: string }[] = [
+    { key: "table", icon: "≡",  label: "Tabela"  },
+    { key: "hbar",  icon: "▭",  label: "Barras"  },
+    { key: "vbar",  icon: "▮",  label: "Colunas" },
+    { key: "line",  icon: "∿",  label: "Linha"   },
+    { key: "pie",   icon: "◐",  label: "Pizza"   },
+  ];
+  return (
+    <div style={{ display: "flex", gap: 4, overflowX: "auto", flexShrink: 0 }}>
+      {items.map((it) => {
+        if (!canChart && it.key !== "table") return null;
+        const isActive = mode === it.key;
+        const isSuggested = !isActive && it.key === suggested;
+        return (
+          <button key={it.key} onClick={() => setMode(it.key)} title={isSuggested ? `${it.label} · sugerido para este dado` : it.label}
+            style={{
+              display: "flex", alignItems: "center", gap: 4,
+              padding: "4px 10px", borderRadius: 7, border: "none",
+              fontSize: 11.5, fontWeight: 500, cursor: "pointer",
+              background: isActive ? BLUE : (isSuggested ? "#dbe5f5" : "#e8edf7"),
+              color: isActive ? "#fff" : "var(--ink-3)",
+              transition: "background .12s, color .12s",
+              position: "relative", whiteSpace: "nowrap",
+            }}>
+            <span style={{ fontSize: 12 }}>{it.icon}</span> {it.label}
+            {isSuggested && (
+              <span style={{
+                position: "absolute", top: -3, right: -3,
+                width: 6, height: 6, borderRadius: "50%", background: BLUE,
+              }} />
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ── Tabela markdown com toggle de 5 modos ───────────────── */
 function MarkdownTable({ headers, rows }: { headers: string[]; rows: string[][] }) {
-  const [mode, setMode] = useState<"table" | "chart">("table");
   const vci = findNumericColIdx(headers, rows);
   const canChart = vci >= 0 && rows.length > 1;
+  const suggested = useMemo(() => detectChartType(rows), [rows]);
+  const [mode, setMode] = useState<ViewMode>("table");
 
   return (
     <div style={{
@@ -345,36 +632,36 @@ function MarkdownTable({ headers, rows }: { headers: string[]; rows: string[][] 
       background: "var(--bg-2)", borderRadius: 10,
       border: "1px solid var(--line-2)", overflow: "hidden",
     }}>
-      {/* Barra de controle */}
       <div style={{
         display: "flex", alignItems: "center", justifyContent: "space-between",
         padding: "8px 12px", borderBottom: "1px solid var(--line-2)",
-        background: BLUE_SOFT,
+        background: BLUE_SOFT, gap: 10,
       }}>
-        <span style={{ fontSize: 11, color: BLUE, fontWeight: 600 }}>
+        <span style={{ fontSize: 11, color: BLUE, fontWeight: 600, whiteSpace: "nowrap" }}>
           {headers.length} colunas · {rows.length} linhas
         </span>
-        {canChart && (
-          <div style={{ display: "flex", gap: 6 }}>
-            <Toggle active={mode === "table"} onClick={() => setMode("table")} icon="≡" label="Tabela" />
-            <Toggle active={mode === "chart"} onClick={() => setMode("chart")} icon="▦" label="Gráfico" />
-          </div>
-        )}
+        <ViewModeBar mode={mode} setMode={setMode} canChart={canChart} suggested={suggested} />
       </div>
-      {/* Conteúdo */}
       <div style={{ padding: "10px 12px" }}>
         {mode === "table"
           ? <StyledTable headers={headers} rows={rows} />
-          : <HBarChart headers={headers} rows={rows} valueColIdx={vci} />
+          : <ChartView type={mode} headers={headers} rows={rows} valueColIdx={vci} />
         }
       </div>
     </div>
   );
 }
 
-/* ── Resultado de query com toggle ──────────────────────── */
+/* ── Resultado de query com toggle de 5 modos ────────────── */
 function ResultTable({ rec }: { rec: QueryRecord }) {
-  const [mode, setMode] = useState<"table" | "chart">("table");
+  const strRows = useMemo(
+    () => rec.rows.map((r) => (r as unknown[]).map((c) => c === null || c === undefined ? "" : String(c))),
+    [rec.rows]
+  );
+  const vci = findNumericColIdx(rec.columns, strRows);
+  const canChart = vci >= 0 && strRows.length > 1;
+  const suggested = useMemo(() => detectChartType(strRows), [strRows]);
+  const [mode, setMode] = useState<ViewMode>("table");
 
   if (rec.error) return (
     <div style={{ marginTop: 8, padding: "10px 14px", background: "#fde8eb", borderRadius: 8, fontSize: 12, color: "#c0273a" }}>
@@ -383,16 +670,10 @@ function ResultTable({ rec }: { rec: QueryRecord }) {
   );
   if (!rec.columns.length) return null;
 
-  const strRows = rec.rows.map((r) =>
-    (r as unknown[]).map((c) => c === null || c === undefined ? "" : String(c))
-  );
-  const vci = findNumericColIdx(rec.columns, strRows);
-  const canChart = vci >= 0 && strRows.length > 1;
-
   return (
     <div style={{ marginTop: 10 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-        <div style={{ fontSize: 11, color: "var(--ink-3)", fontWeight: 500 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6, gap: 10 }}>
+        <div style={{ fontSize: 11, color: "var(--ink-3)", fontWeight: 500, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {rec.description}
           {rec.count > 0 && (
             <span style={{ marginLeft: 6, color: "var(--muted)", fontWeight: 400 }}>
@@ -400,17 +681,12 @@ function ResultTable({ rec }: { rec: QueryRecord }) {
             </span>
           )}
         </div>
-        {canChart && (
-          <div style={{ display: "flex", gap: 6 }}>
-            <Toggle active={mode === "table"} onClick={() => setMode("table")} icon="≡" label="Tabela" />
-            <Toggle active={mode === "chart"} onClick={() => setMode("chart")} icon="▦" label="Gráfico" />
-          </div>
-        )}
+        <ViewModeBar mode={mode} setMode={setMode} canChart={canChart} suggested={suggested} />
       </div>
       {mode === "table"
         ? <StyledTable headers={rec.columns} rows={strRows} limit={8} />
         : <div style={{ background: "var(--bg-2)", borderRadius: 10, padding: "12px 14px", border: "1px solid var(--line-2)" }}>
-            <HBarChart headers={rec.columns} rows={strRows} valueColIdx={vci} />
+            <ChartView type={mode} headers={rec.columns} rows={strRows} valueColIdx={vci} />
           </div>
       }
     </div>
