@@ -112,12 +112,30 @@ export async function POST(req: NextRequest) {
 
       /* Se atingir o limite, pede ao Claude que conclua com o que tem */
       if (iterations > MAX_ITERATIONS) {
+        // response.content pode conter tool_use blocks pendentes.
+        // A API Anthropic exige que todo tool_use seja seguido de tool_result —
+        // enviar texto puro após tool_use causa erro 400.
+        const pendingBlocks = response.content.filter(
+          (b): b is Anthropic.ToolUseBlock => b.type === "tool_use"
+        );
         sdkMessages.push({ role: "assistant", content: response.content });
         sdkMessages.push({
           role: "user",
-          content:
-            "Você já executou muitas queries. Com os dados que já obteve, " +
-            "apresente a análise final agora — mesmo que incompleta.",
+          content: [
+            // tool_results sintéticos para cada tool_use pendente
+            ...pendingBlocks.map((b) => ({
+              type: "tool_result" as const,
+              tool_use_id: b.id,
+              content: "Limite de iterações atingido — use os dados já obtidos.",
+            })),
+            // instrução de encerramento no mesmo bloco de usuário
+            {
+              type: "text" as const,
+              text:
+                "Você já executou muitas queries. Com os dados que já obteve, " +
+                "apresente a análise final agora — mesmo que incompleta.",
+            },
+          ],
         });
         response = await client.messages.create({
           model: "claude-haiku-4-5",

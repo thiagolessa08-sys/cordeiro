@@ -856,7 +856,18 @@ export default function ChatPage() {
     setInput("");
     setLoading(true);
 
-    const history = [...messages, userMsg].map((m) => ({ role: m.role, content: m.content }));
+    // Sanitiza o histórico: remove mensagens de assistente com erro/vazio
+    // e também remove o par de usuário correspondente, para evitar que
+    // conteúdo inválido cause erros 400 na API Anthropic.
+    const rawHistory = [...messages, userMsg].filter((m) => !m.loading);
+    const history: { role: "user" | "assistant"; content: string }[] = [];
+    for (const m of rawHistory) {
+      if (m.role === "assistant" && (!m.content.trim() || m.error)) {
+        history.pop(); // descarta o user message par também
+      } else {
+        history.push({ role: m.role, content: m.content });
+      }
+    }
 
     // Abort automático após 110 segundos (antes do maxDuration do servidor)
     const controller = new AbortController();
@@ -938,7 +949,7 @@ export default function ChatPage() {
               ＋ Nova consulta
             </button>
           )}
-          <span style={{ fontSize: 11, color: "var(--muted)" }}>Claude · Sybase IQ 16</span>
+          <span style={{ fontSize: 11, color: "var(--muted)" }}>IA Analítica Cordeiro</span>
         </div>
       </div>
 
